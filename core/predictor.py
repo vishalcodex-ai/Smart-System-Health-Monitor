@@ -2,16 +2,14 @@
 # File: predictor.py
 # Project: Smart System Health Monitor
 # Description:
-#   Predicts future system failure risk using
-#   Machine Learning model.
-#   Uses historical metrics to estimate
-#   probability of failure and confidence.
+#   Hybrid Failure Predictor
+#   - Uses ML model if available
+#   - Falls back to rule-based prediction
 # ==========================================
 
 import os
 import pickle
 import datetime
-
 import numpy as np
 
 from config.settings import (
@@ -29,12 +27,13 @@ from utils.file_handler import append_prediction_data
 logger = get_logger(__name__)
 
 # -------------------------------
-# System Failure Predictor Class
+# Failure Predictor
 # -------------------------------
 class FailurePredictor:
     """
-    Predicts future system failure probability
-    using trained ML model.
+    Predicts system failure probability using:
+    - ML model (if available)
+    - Rule-based fallback (always available)
     """
 
     def __init__(self):
@@ -48,13 +47,8 @@ class FailurePredictor:
     # Load ML Model
     # -------------------------------
     def _load_model(self):
-        """
-        Load trained ML model from disk.
-        """
         if not os.path.exists(ML_MODEL_PATH):
-            logger.warning(
-                "ML model not found. Prediction disabled."
-            )
+            logger.warning("ML model not found. Using rule-based prediction.")
             return
 
         try:
@@ -68,110 +62,108 @@ class FailurePredictor:
             logger.error(f"Failed to load ML model: {e}")
 
     # -------------------------------
-    # Prepare Feature Vector
+    # Prepare ML Feature Vector
     # -------------------------------
-    def _prepare_features(self, analysis_result):
+    def _prepare_features(self, analysis):
         """
-        Convert analysis results into ML feature vector.
+        Convert analysis dict into ML feature vector
         """
-        feature_map = {
-            "cpu": 0,
-            "ram": 0,
-            "disk": 0,
-            "network": 0,
-            "temperature": 0
+        cpu = analysis.get("cpu", 0)
+        ram = analysis.get("ram", 0)
+        disk = analysis.get("disk", 0)
+
+        return np.array([[cpu, ram, disk]])
+
+    # -------------------------------
+    # Rule-based Prediction (Fallback)
+    # -------------------------------
+    def _rule_based_prediction(self, analysis):
+        cpu = analysis.get("cpu", 0)
+        ram = analysis.get("ram", 0)
+        disk = analysis.get("disk", 0)
+
+        risk = 0
+
+        if cpu > 85:
+            risk += 40
+        elif cpu > 70:
+            risk += 20
+
+        if ram > 90:
+            risk += 40
+        elif ram > 75:
+            risk += 20
+
+        if disk > 85:
+            risk += 20
+
+        risk = min(risk, 100)
+        confidence = round(60 + (risk / 4), 2)
+
+        return {
+            "prediction_enabled": True,
+            "mode": "rule_based",
+            "failure_probability": risk,
+            "confidence": confidence,
+            "high_risk": risk >= (PREDICTION_CONFIDENCE_THRESHOLD * 100),
+            "message": "Rule-based failure prediction active"
         }
-
-        severity_score = {
-            "normal": 0,
-            "warning": 1,
-            "high": 2,
-            "critical": 3
-        }
-
-        for item in analysis_result:
-            metric = item["metric"]
-            status = item["status"]
-
-            if metric in feature_map:
-                feature_map[metric] = severity_score.get(status, 0)
-
-        return np.array(list(feature_map.values())).reshape(1, -1)
 
     # -------------------------------
     # Predict Failure
     # -------------------------------
-    def predict(self, analysis_result):
+    def predict(self, analysis):
         """
-        Predict failure probability and confidence.
+        Predict failure probability & confidence
         """
-        if not ENABLE_ML_PREDICTION or not self.model_loaded:
-            return {
-                "prediction_enabled": False,
-                "failure_probability": None,
-                "confidence": None,
-                "message": "ML prediction disabled or model not loaded"
-            }
+        # ---------- ML PATH ----------
+        if ENABLE_ML_PREDICTION and self.model_loaded:
+            try:
+                features = self._prepare_features(analysis)
 
-        try:
-            features = self._prepare_features(analysis_result)
+                if hasattr(self.model, "predict_proba"):
+                    probabilities = self.model.predict_proba(features)
+                    failure_probability = round(probabilities[0][1] * 100, 2)
+                    confidence = round(max(probabilities[0]) * 100, 2)
+                else:
+                    prediction = self.model.predict(features)
+                    failure_probability = 100 if prediction[0] == 1 else 0
+                    confidence = 100
 
-            # Predict probability
-            if hasattr(self.model, "predict_proba"):
-                probabilities = self.model.predict_proba(features)
-                failure_probability = round(
-                    probabilities[0][1] * 100, 2
-                )
-                confidence = round(
-                    max(probabilities[0]) * 100, 2
-                )
-            else:
-                prediction = self.model.predict(features)
-                failure_probability = 100 if prediction[0] == 1 else 0
-                confidence = 100
+                result = {
+                    "prediction_enabled": True,
+                    "mode": "ml",
+                    "failure_probability": failure_probability,
+                    "confidence": confidence,
+                    "high_risk": confidence >= (
+                        PREDICTION_CONFIDENCE_THRESHOLD * 100
+                    ),
+                    "message": "ML-based failure prediction"
+                }
 
-            result = {
-                "prediction_enabled": True,
-                "failure_probability": failure_probability,
-                "confidence": confidence,
-                "high_risk": confidence >= (
-                    PREDICTION_CONFIDENCE_THRESHOLD * 100
-                )
-            }
+                self._save_prediction(result)
+                return result
 
-            # Save prediction data
-            self._save_prediction(result)
+            except Exception as e:
+                logger.error(f"ML prediction failed: {e}")
 
-            logger.info(
-                f"Failure Prediction | Probability: {failure_probability}% "
-                f"| Confidence: {confidence}%"
-            )
-
-            return result
-
-        except Exception as e:
-            logger.error(f"Prediction failed: {e}")
-            return {
-                "prediction_enabled": False,
-                "failure_probability": None,
-                "confidence": None,
-                "message": "Prediction error"
-            }
+        # ---------- FALLBACK ----------
+        result = self._rule_based_prediction(analysis)
+        self._save_prediction(result)
+        return result
 
     # -------------------------------
     # Save Prediction Data
     # -------------------------------
-    def _save_prediction(self, prediction_result):
-        """
-        Append prediction data for future training.
-        """
+    def _save_prediction(self, prediction):
         try:
             record = {
                 "timestamp": datetime.datetime.now().strftime(
                     "%Y-%m-%d %H:%M:%S"
                 ),
-                "failure_probability": prediction_result["failure_probability"],
-                "confidence": prediction_result["confidence"]
+                "mode": prediction.get("mode"),
+                "failure_probability": prediction.get("failure_probability"),
+                "confidence": prediction.get("confidence")
             }
 
             append_prediction_data(record)
