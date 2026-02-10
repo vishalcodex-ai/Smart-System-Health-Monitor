@@ -119,7 +119,22 @@ class SystemMonitor:
             "process_count": self.get_process_count(),
             "load_average": self.get_load_average(),
         }
+    
+    def get_metrics(self):
+        try:
+            cpu = psutil.cpu_percent(interval=1)
+            ram = psutil.virtual_memory().percent
+            disk = psutil.disk_usage('/').percent
 
+            return {
+                "cpu": cpu,
+                "ram": ram,
+                "disk": disk
+            }
+        except Exception as e:
+            return {
+                "error": str(e)
+            }
     # -------------------------------
     # Continuous Monitoring Generator
     # -------------------------------

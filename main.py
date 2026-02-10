@@ -2,16 +2,13 @@
 # File: main.py
 # Project: Smart System Health Monitor
 # Description:
-#   Main entry point of the application.
-#   Runs system monitoring, analysis,
-#   prediction, logging, alerts, and
-#   report generation in a continuous loop.
+#   Main execution service for monitoring,
+#   analysis, prediction, logging, and reports
 # ==========================================
 
 import time
 import sys
 import signal
-from reports.system_report_generator import generate_report
 
 from core.monitor import SystemMonitor
 from core.analyzer import SystemAnalyzer
@@ -34,17 +31,17 @@ from config.settings import (
 # -------------------------------
 # Initialize Logger
 # -------------------------------
-logger = get_logger(__name__)
+logger = get_logger("main")
 
 # -------------------------------
-# Graceful Shutdown Handler
+# Graceful Shutdown Control
 # -------------------------------
+RUNNING = True
+
 def handle_exit(signum, frame):
-    """
-    Handle graceful shutdown on Ctrl+C
-    """
-    logger.warning("Shutdown signal received. Exiting safely...")
-    sys.exit(0)
+    global RUNNING
+    logger.warning("Shutdown signal received. Stopping safely...")
+    RUNNING = False
 
 signal.signal(signal.SIGINT, handle_exit)
 signal.signal(signal.SIGTERM, handle_exit)
@@ -53,12 +50,8 @@ signal.signal(signal.SIGTERM, handle_exit)
 # Main Application Loop
 # -------------------------------
 def main():
-    """
-    Main execution loop.
-    """
-    logger.info("Starting Smart System Health Monitor")
+    logger.info("🚀 Smart System Health Monitor started")
 
-    # Initialize core components
     monitor = SystemMonitor()
     analyzer = SystemAnalyzer()
     predictor = FailurePredictor()
@@ -66,15 +59,15 @@ def main():
     last_daily_report_date = None
     last_weekly_report_week = None
 
-    while True:
+    while RUNNING:
         try:
             # ---------------------------
-            # Collect System Metrics
+            # Collect Metrics
             # ---------------------------
             metrics = monitor.collect_metrics()
 
             # ---------------------------
-            # Save Raw System Logs
+            # Persist Raw Logs
             # ---------------------------
             append_system_log(metrics)
 
@@ -84,51 +77,47 @@ def main():
             analysis_result = analyzer.analyze_metrics(metrics)
 
             # ---------------------------
-            # Predict Future Failure
+            # Failure Prediction
             # ---------------------------
             prediction_result = predictor.predict(
-                analysis_result["analysis"]
+                analysis_result.get("analysis", {})
             )
 
             # ---------------------------
-            # Generate Reports (Optional)
+            # Report Generation
             # ---------------------------
             if ENABLE_REPORTS:
                 current_date = metrics["timestamp"].split(" ")[0]
                 current_week = time.strftime("%Y-%W")
 
-                # Daily report (once per day)
                 if last_daily_report_date != current_date:
                     generate_daily_report(current_date)
                     last_daily_report_date = current_date
 
-                # Weekly report (once per week)
                 if last_weekly_report_week != current_week:
                     generate_weekly_report()
                     last_weekly_report_week = current_week
 
             # ---------------------------
-            # Console Summary (Optional)
+            # Console Summary
             # ---------------------------
             logger.info(
-                f"Health Score: {analysis_result['health_score']} | "
-                f"Failure Risk: {analysis_result['failure_risk']}%"
+                f"Health Score: {analysis_result.get('health_score')} | "
+                f"Failure Risk: {analysis_result.get('failure_risk')}%"
             )
 
         except Exception as e:
-            logger.error(f"Main loop error: {e}")
+            logger.exception(f"Main loop error: {e}")
 
         # ---------------------------
-        # Wait for Next Cycle
+        # Controlled Sleep
         # ---------------------------
         sleep_seconds(MONITORING_INTERVAL_SECONDS)
+
+    logger.info("🛑 Smart System Health Monitor stopped cleanly")
 
 # -------------------------------
 # Entry Point
 # -------------------------------
 if __name__ == "__main__":
     main()
-
-# -------------------------------
-# End of main.py
-# -------------------------------

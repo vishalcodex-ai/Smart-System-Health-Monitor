@@ -1,14 +1,13 @@
 # ==========================================
 # Smart System Health Monitor
-# Streamlit Dashboard (Railway Ready)
+# Streamlit Dashboard (Railway SAFE)
+# File: dashboard/app.py
 # ==========================================
 
-from streamlit_autorefresh import st_autorefresh
 import os
 import sys
-import time
-import threading
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 
 # -------------------------------
 # Fix Python Path
@@ -38,72 +37,48 @@ st.set_page_config(
 st.title("🖥️ Smart System Health Monitor")
 st.caption("Real-time system monitoring & failure prediction")
 
-# 🔁 AUTO REFRESH UI (every 2 seconds)
-st_autorefresh(interval=2000, key="refresh")
+# 🔁 Auto refresh every 3 sec
+st_autorefresh(interval=3000, key="refresh")
 
 logger = get_logger("dashboard")
 
 # -------------------------------
-# Core Components
+# Initialize Core
 # -------------------------------
 monitor = SystemMonitor()
 analyzer = SystemAnalyzer()
 predictor = FailurePredictor()
 
 # -------------------------------
-# Session State
-# -------------------------------
-st.session_state.setdefault("metrics", {})
-st.session_state.setdefault("analysis", {})
-st.session_state.setdefault("prediction", {})
-st.session_state.setdefault("thread_started", False)
-
-# -------------------------------
-# ALERT CONTROL
-# -------------------------------
-LAST_ALERT_TIME = 0
-ALERT_COOLDOWN = 300  # seconds
-
-# -------------------------------
 # Health Logic
 # -------------------------------
 def enrich_analysis(metrics, analysis):
-    global LAST_ALERT_TIME
-
     cpu = metrics.get("cpu", 0)
     ram = metrics.get("ram", {}).get("percent", 0)
     disk = metrics.get("disk", {}).get("percent", 0)
 
     score = 100
-    problems, reasons, suggestions = [], [], []
+    problems, suggestions = [], []
 
     if cpu > 85:
         score -= 40
         problems.append("CPU Overloaded")
-        reasons.append("Heavy background processes")
         suggestions.append("Close unused applications")
 
     if ram > 90:
         score -= 40
         problems.append("RAM Almost Full")
-        reasons.append("Memory intensive apps")
         suggestions.append("Restart system / reduce startup apps")
 
     if disk > 85:
         score -= 20
         problems.append("Disk Usage High")
-        reasons.append("Low free disk space")
         suggestions.append("Delete unused files")
-
-    now = time.time()
-    show_alert = False
 
     if score <= 40:
         status = "Critical"
         message = "⚠️ High risk of system failure"
-        if now - LAST_ALERT_TIME > ALERT_COOLDOWN:
-            show_alert = True
-            LAST_ALERT_TIME = now
+        auto_clean_ram()
     elif score <= 70:
         status = "Warning"
         message = "⚠️ System under pressure"
@@ -116,46 +91,26 @@ def enrich_analysis(metrics, analysis):
         "status": status,
         "message": message,
         "problems": problems,
-        "reasons": reasons,
-        "suggestions": suggestions,
-        "show_alert": show_alert
+        "suggestions": suggestions
     }
 
     return analysis
 
 # -------------------------------
-# Background Thread (DATA ONLY)
+# Collect Data (ONE CYCLE)
 # -------------------------------
-def background_monitor():
-    logger.info("Background monitoring started")
-    while True:
-        try:
-            metrics = monitor.collect_metrics()
-            append_system_log(metrics)
+try:
+    metrics = monitor.collect_metrics()
+    append_system_log(metrics)
 
-            analysis = analyzer.analyze_metrics(metrics)
-            analysis = enrich_analysis(metrics, analysis)
+    analysis = analyzer.analyze_metrics(metrics)
+    analysis = enrich_analysis(metrics, analysis)
 
-            if analysis["health"]["status"] == "Critical" and analysis["health"]["show_alert"]:
-                auto_clean_ram()
+    prediction = predictor.predict(analysis.get("analysis", {}))
 
-            prediction = predictor.predict(analysis.get("analysis", {}))
-
-            st.session_state.metrics = metrics
-            st.session_state.analysis = analysis
-            st.session_state.prediction = prediction
-
-        except Exception as e:
-            logger.error(f"Monitoring error: {e}")
-
-        time.sleep(3)
-
-# -------------------------------
-# Start Thread ONCE
-# -------------------------------
-if not st.session_state.thread_started:
-    threading.Thread(target=background_monitor, daemon=True).start()
-    st.session_state.thread_started = True
+except Exception as e:
+    st.error(f"Monitoring error: {e}")
+    metrics, analysis, prediction = {}, {}, {}
 
 # -------------------------------
 # UI METRICS
@@ -163,20 +118,20 @@ if not st.session_state.thread_started:
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.metric("CPU Usage (%)", st.session_state.metrics.get("cpu", 0))
+    st.metric("CPU Usage (%)", metrics.get("cpu", 0))
 
 with col2:
-    st.metric("RAM Usage (%)", st.session_state.metrics.get("ram", {}).get("percent", 0))
+    st.metric("RAM Usage (%)", metrics.get("ram", {}).get("percent", 0))
 
 with col3:
-    st.metric("Disk Usage (%)", st.session_state.metrics.get("disk", {}).get("percent", 0))
+    st.metric("Disk Usage (%)", metrics.get("disk", {}).get("percent", 0))
 
 st.divider()
 
 # -------------------------------
 # HEALTH STATUS
 # -------------------------------
-health = st.session_state.analysis.get("health")
+health = analysis.get("health")
 
 if health:
     st.subheader("🩺 System Health")
@@ -202,9 +157,9 @@ if health:
 st.divider()
 
 # -------------------------------
-# PREDICTION
+# FAILURE PREDICTION
 # -------------------------------
 st.subheader("🔮 Failure Prediction")
-st.json(st.session_state.prediction)
+st.json(prediction)
 
 st.success("Dashboard running live 🚀")
