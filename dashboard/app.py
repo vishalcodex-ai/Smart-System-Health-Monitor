@@ -3,6 +3,7 @@
 # Streamlit Dashboard (Railway Ready)
 # ==========================================
 
+from streamlit_autorefresh import st_autorefresh
 import os
 import sys
 import time
@@ -27,7 +28,7 @@ from utils.file_handler import append_system_log
 from utils.logger import get_logger
 
 # -------------------------------
-# Streamlit Page Config (🔥 IMPORTANT)
+# Streamlit Page Config
 # -------------------------------
 st.set_page_config(
     page_title="Smart System Health Monitor",
@@ -36,6 +37,9 @@ st.set_page_config(
 
 st.title("🖥️ Smart System Health Monitor")
 st.caption("Real-time system monitoring & failure prediction")
+
+# 🔁 AUTO REFRESH UI (every 2 seconds)
+st_autorefresh(interval=2000, key="refresh")
 
 logger = get_logger("dashboard")
 
@@ -47,16 +51,12 @@ analyzer = SystemAnalyzer()
 predictor = FailurePredictor()
 
 # -------------------------------
-# Session State (IMPORTANT)
+# Session State
 # -------------------------------
-if "metrics" not in st.session_state:
-    st.session_state.metrics = {}
-
-if "analysis" not in st.session_state:
-    st.session_state.analysis = {}
-
-if "prediction" not in st.session_state:
-    st.session_state.prediction = {}
+st.session_state.setdefault("metrics", {})
+st.session_state.setdefault("analysis", {})
+st.session_state.setdefault("prediction", {})
+st.session_state.setdefault("thread_started", False)
 
 # -------------------------------
 # ALERT CONTROL
@@ -65,7 +65,7 @@ LAST_ALERT_TIME = 0
 ALERT_COOLDOWN = 300  # seconds
 
 # -------------------------------
-# Health Enrichment Logic
+# Health Logic
 # -------------------------------
 def enrich_analysis(metrics, analysis):
     global LAST_ALERT_TIME
@@ -95,17 +95,15 @@ def enrich_analysis(metrics, analysis):
         reasons.append("Low free disk space")
         suggestions.append("Delete unused files")
 
-    current_time = time.time()
+    now = time.time()
     show_alert = False
 
     if score <= 40:
         status = "Critical"
         message = "⚠️ High risk of system failure"
-
-        if current_time - LAST_ALERT_TIME > ALERT_COOLDOWN:
+        if now - LAST_ALERT_TIME > ALERT_COOLDOWN:
             show_alert = True
-            LAST_ALERT_TIME = current_time
-
+            LAST_ALERT_TIME = now
     elif score <= 70:
         status = "Warning"
         message = "⚠️ System under pressure"
@@ -126,11 +124,10 @@ def enrich_analysis(metrics, analysis):
     return analysis
 
 # -------------------------------
-# Background Monitor Thread
+# Background Thread (DATA ONLY)
 # -------------------------------
 def background_monitor():
     logger.info("Background monitoring started")
-
     while True:
         try:
             metrics = monitor.collect_metrics()
@@ -151,46 +148,39 @@ def background_monitor():
         except Exception as e:
             logger.error(f"Monitoring error: {e}")
 
-        time.sleep(5)
+        time.sleep(3)
 
 # -------------------------------
-# Start Thread Only Once
+# Start Thread ONCE
 # -------------------------------
-if "thread_started" not in st.session_state:
+if not st.session_state.thread_started:
     threading.Thread(target=background_monitor, daemon=True).start()
     st.session_state.thread_started = True
 
 # -------------------------------
-# DASHBOARD UI
+# UI METRICS
 # -------------------------------
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.metric(
-        "CPU Usage (%)",
-        st.session_state.metrics.get("cpu", 0)
-    )
+    st.metric("CPU Usage (%)", st.session_state.metrics.get("cpu", 0))
 
 with col2:
-    st.metric(
-        "RAM Usage (%)",
-        st.session_state.metrics.get("ram", {}).get("percent", 0)
-    )
+    st.metric("RAM Usage (%)", st.session_state.metrics.get("ram", {}).get("percent", 0))
 
 with col3:
-    st.metric(
-        "Disk Usage (%)",
-        st.session_state.metrics.get("disk", {}).get("percent", 0)
-    )
+    st.metric("Disk Usage (%)", st.session_state.metrics.get("disk", {}).get("percent", 0))
 
 st.divider()
 
-health = st.session_state.analysis.get("health", {})
+# -------------------------------
+# HEALTH STATUS
+# -------------------------------
+health = st.session_state.analysis.get("health")
 
 if health:
     st.subheader("🩺 System Health")
-
-    st.progress(health.get("score", 0) / 100)
+    st.progress(health["score"] / 100)
 
     if health["status"] == "Critical":
         st.error(health["message"])
@@ -199,19 +189,22 @@ if health:
     else:
         st.success(health["message"])
 
-    if health.get("problems"):
+    if health["problems"]:
         st.subheader("⚠️ Problems")
         for p in health["problems"]:
             st.write("•", p)
 
-    if health.get("suggestions"):
+    if health["suggestions"]:
         st.subheader("💡 Suggestions")
         for s in health["suggestions"]:
             st.write("•", s)
 
 st.divider()
 
+# -------------------------------
+# PREDICTION
+# -------------------------------
 st.subheader("🔮 Failure Prediction")
 st.json(st.session_state.prediction)
 
-st.success("Dashboard loaded successfully 🎉")
+st.success("Dashboard running live 🚀")
