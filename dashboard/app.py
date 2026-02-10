@@ -106,7 +106,12 @@ try:
     analysis = analyzer.analyze_metrics(metrics)
     analysis = enrich_analysis(metrics, analysis)
 
-    prediction = predictor.predict(analysis.get("analysis", {}))
+    prediction = predictor.predict({
+        "cpu": metrics.get("cpu", 0),
+        "ram": metrics.get("ram", {}).get("percent", 0),
+        "disk": metrics.get("disk", {}).get("percent", 0)
+    })
+
 
 except Exception as e:
     st.error(f"Monitoring error: {e}")
