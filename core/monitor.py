@@ -1,145 +1,81 @@
 # ==========================================
-# File: monitor.py
-# Project: Smart System Health Monitor
-# Description:
-#   Collects real-time system metrics such as
-#   CPU, RAM, Disk, Network, Temperature,
-#   Process Count, and Load Average.
-#   This module acts as the data source for
-#   analyzer, predictor, alerts, and dashboard.
+# File: core/monitor.py
+# Smart System Health Monitor
 # ==========================================
 
-import psutil
-import platform
 import time
-import os
+import platform
+import psutil
 
-from config.settings import (
-    MONITOR_CPU,
-    MONITOR_RAM,
-    MONITOR_DISK,
-    MONITOR_NETWORK,
-    MONITOR_TEMPERATURE,
-    MONITORING_INTERVAL_SECONDS
-)
+MONITORING_INTERVAL_SECONDS = 3
 
-# -------------------------------
-# System Monitor Class
-# -------------------------------
+
 class SystemMonitor:
-    """
-    Collects system health metrics in real-time.
-    """
-
     def __init__(self):
-        self.system_info = self._get_system_info()
-        self.last_network_stats = psutil.net_io_counters()
-
-    # -------------------------------
-    # System Info
-    # -------------------------------
-    def _get_system_info(self):
-        """
-        Get static system information.
-        """
-        return {
+        self.system_info = {
             "os": platform.system(),
             "os_version": platform.version(),
             "architecture": platform.machine(),
-            "processor": platform.processor(),
-            "cpu_cores_logical": psutil.cpu_count(logical=True),
-            "cpu_cores_physical": psutil.cpu_count(logical=False),
-            "total_ram_gb": round(psutil.virtual_memory().total / (1024 ** 3), 2)
+            "cpu_cores": psutil.cpu_count(logical=True),
         }
 
+        # 🔥 IMPORTANT: warm-up call (psutil requirement)
+        psutil.cpu_percent(interval=None)
+
     # -------------------------------
-    # CPU Metrics
+    # CPU Usage
     # -------------------------------
     def get_cpu_usage(self):
         """
-        Get CPU usage percentage.
+        Returns real CPU usage percentage.
+        interval=1 avoids always-0 bug.
         """
-        if not MONITOR_CPU:
-            return None
-
         return psutil.cpu_percent(interval=1)
 
     # -------------------------------
-    # RAM Metrics
+    # RAM Usage
     # -------------------------------
     def get_ram_usage(self):
-        """
-        Get RAM usage details.
-        """
-        if not MONITOR_RAM:
-            return None
-
         mem = psutil.virtual_memory()
         return {
-            "total_gb": round(mem.total / (1024 ** 3), 2),
-            "used_gb": round(mem.used / (1024 ** 3), 2),
-            "available_gb": round(mem.available / (1024 ** 3), 2),
+            "total": round(mem.total / (1024 ** 3), 2),
+            "used": round(mem.used / (1024 ** 3), 2),
             "percent": mem.percent
         }
 
     # -------------------------------
-    # Disk Metrics
+    # Disk Usage
     # -------------------------------
     def get_disk_usage(self):
-        """
-        Get Disk usage details.
-        """
-        if not MONITOR_DISK:
-            return None
-
         disk = psutil.disk_usage("/")
         return {
-            "total_gb": round(disk.total / (1024 ** 3), 2),
-            "used_gb": round(disk.used / (1024 ** 3), 2),
-            "free_gb": round(disk.free / (1024 ** 3), 2),
+            "total": round(disk.total / (1024 ** 3), 2),
+            "used": round(disk.used / (1024 ** 3), 2),
             "percent": disk.percent
         }
 
     # -------------------------------
-    # Network Metrics
+    # Network Usage
     # -------------------------------
     def get_network_usage(self):
-        """
-        Calculate network upload/download speed.
-        """
-        if not MONITOR_NETWORK:
-            return None
-
-        current = psutil.net_io_counters()
-        sent_bytes = current.bytes_sent - self.last_network_stats.bytes_sent
-        recv_bytes = current.bytes_recv - self.last_network_stats.bytes_recv
-
-        self.last_network_stats = current
-
+        net = psutil.net_io_counters()
         return {
-            "upload_mb_s": round((sent_bytes / 1024 / 1024), 3),
-            "download_mb_s": round((recv_bytes / 1024 / 1024), 3)
+            "bytes_sent_mb": round(net.bytes_sent / (1024 ** 2), 2),
+            "bytes_recv_mb": round(net.bytes_recv / (1024 ** 2), 2)
         }
 
     # -------------------------------
-    # Temperature Metrics
+    # CPU Temperature (Linux only)
     # -------------------------------
     def get_temperature(self):
-        """
-        Get CPU temperature (if supported).
-        """
-        if not MONITOR_TEMPERATURE:
-            return None
-
         try:
             temps = psutil.sensors_temperatures()
             if not temps:
                 return None
 
-            for name, entries in temps.items():
-                for entry in entries:
-                    if entry.current:
-                        return round(entry.current, 2)
+            for name in temps:
+                if temps[name]:
+                    return temps[name][0].current
         except Exception:
             return None
 
@@ -149,26 +85,21 @@ class SystemMonitor:
     # Process Count
     # -------------------------------
     def get_process_count(self):
-        """
-        Get total number of running processes.
-        """
         return len(psutil.pids())
 
     # -------------------------------
-    # Load Average
+    # Load Average (Linux / Unix only)
     # -------------------------------
     def get_load_average(self):
-        """
-        Get system load average (Unix only).
-        """
-        if hasattr(os, "getloadavg"):
-            load1, load5, load15 = os.getloadavg()
+        try:
             return {
-                "1_min": round(load1, 2),
-                "5_min": round(load5, 2),
-                "15_min": round(load15, 2)
+                "1_min": psutil.getloadavg()[0],
+                "5_min": psutil.getloadavg()[1],
+                "15_min": psutil.getloadavg()[2],
             }
-        return None
+        except (AttributeError, OSError):
+            # Windows / unsupported OS
+            return None
 
     # -------------------------------
     # Collect All Metrics
@@ -177,7 +108,7 @@ class SystemMonitor:
         """
         Collect all enabled system metrics.
         """
-        metrics = {
+        return {
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "system_info": self.system_info,
             "cpu": self.get_cpu_usage(),
@@ -186,10 +117,8 @@ class SystemMonitor:
             "network": self.get_network_usage(),
             "temperature": self.get_temperature(),
             "process_count": self.get_process_count(),
-            "load_average": self.get_load_average()
+            "load_average": self.get_load_average(),
         }
-
-        return metrics
 
     # -------------------------------
     # Continuous Monitoring Generator
@@ -201,6 +130,7 @@ class SystemMonitor:
         while True:
             yield self.collect_metrics()
             time.sleep(MONITORING_INTERVAL_SECONDS)
+
 
 # -------------------------------
 # End of monitor.py
