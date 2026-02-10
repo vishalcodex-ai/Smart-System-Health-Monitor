@@ -6,6 +6,7 @@
 import time
 import platform
 import psutil
+from datetime import datetime
 
 MONITORING_INTERVAL_SECONDS = 3
 
@@ -105,20 +106,63 @@ class SystemMonitor:
     # Collect All Metrics
     # -------------------------------
     def collect_metrics(self):
-        """
-        Collect all enabled system metrics.
-        """
-        return {
-            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "system_info": self.system_info,
-            "cpu": self.get_cpu_usage(),
-            "ram": self.get_ram_usage(),
-            "disk": self.get_disk_usage(),
-            "network": self.get_network_usage(),
-            "temperature": self.get_temperature(),
-            "process_count": self.get_process_count(),
-            "load_average": self.get_load_average(),
-        }
+        try:
+            # -----------------------
+            # CPU
+            # -----------------------
+            cpu = psutil.cpu_percent(interval=1)
+
+            # -----------------------
+            # RAM
+            # -----------------------
+            mem = psutil.virtual_memory()
+            ram = {
+                "total": round(mem.total / (1024**3), 2),
+                "used": round(mem.used / (1024**3), 2),
+                "percent": mem.percent
+            }
+
+            # -----------------------
+            # Disk
+            # -----------------------
+            disk_usage = psutil.disk_usage("/")
+            disk = {
+                "total": round(disk_usage.total / (1024**3), 2),
+                "used": round(disk_usage.used / (1024**3), 2),
+                "percent": disk_usage.percent
+            }
+
+            # -----------------------
+            # Network (SAFE)
+            # -----------------------
+            net1 = psutil.net_io_counters()
+            time.sleep(1)
+            net2 = psutil.net_io_counters()
+
+            upload_mb_s = round(
+                (net2.bytes_sent - net1.bytes_sent) / (1024**2), 3
+            )
+            download_mb_s = round(
+                (net2.bytes_recv - net1.bytes_recv) / (1024**2), 3
+            )
+
+            network = {
+                "upload_mb_s": max(upload_mb_s, 0),
+                "download_mb_s": max(download_mb_s, 0)
+            }
+
+            return {
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "cpu": cpu,
+                "ram": ram,
+                "disk": disk,
+                "network": network
+            }
+
+        except Exception as e:
+            return {
+                "error": str(e)
+            }
     
     def get_metrics(self):
         try:
