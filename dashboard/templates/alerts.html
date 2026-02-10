@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>System Alerts & Suggestions</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+    <style>
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            background: #0f172a;
+            color: #e5e7eb;
+            margin: 0;
+            padding: 0;
+        }
+
+        header {
+            background: #020617;
+            padding: 15px 25px;
+            font-size: 22px;
+            font-weight: bold;
+            border-bottom: 2px solid #1e293b;
+        }
+
+        .container {
+            padding: 20px;
+        }
+
+        .card {
+            background: #020617;
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid #1e293b;
+            margin-bottom: 20px;
+        }
+
+        h3 {
+            margin-top: 0;
+            color: #38bdf8;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #1e293b;
+        }
+
+        th {
+            color: #94a3b8;
+            font-weight: bold;
+        }
+
+        .status-normal {
+            color: #22c55e;
+            font-weight: bold;
+        }
+
+        .status-warning {
+            color: #facc15;
+            font-weight: bold;
+        }
+
+        .status-high {
+            color: #fb923c;
+            font-weight: bold;
+        }
+
+        .status-critical {
+            color: #ef4444;
+            font-weight: bold;
+        }
+
+        ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        footer {
+            text-align: center;
+            padding: 10px;
+            background: #020617;
+            border-top: 1px solid #1e293b;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+
+        .nav {
+            margin-bottom: 15px;
+        }
+
+        .nav a {
+            color: #38bdf8;
+            margin-right: 15px;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        .nav a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    🚨 System Alerts & Optimization Suggestions
+</header>
+
+<div class="container">
+
+    <!-- Navigation -->
+    <div class="nav">
+        <a href="/">🏠 Dashboard</a>
+        <a href="/prediction">🔮 Prediction</a>
+    </div>
+
+    <!-- Alerts Table -->
+    <div class="card">
+        <h3>Current System Alerts</h3>
+
+        {% if analysis.analysis %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>Current Value</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in analysis.analysis %}
+                <tr>
+                    <td>{{ item.metric | upper }}</td>
+                    <td>{{ item.value }}</td>
+                    <td class="status-{{ item.status }}">
+                        {{ item.status | upper }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+            <p>No data available.</p>
+        {% endif %}
+    </div>
+
+    <!-- Suggestions -->
+    <div class="card">
+        <h3>🛠️ Optimization Suggestions</h3>
+
+        {% if analysis.suggestions %}
+            <ul>
+                {% for suggestion in analysis.suggestions %}
+                    <li>{{ suggestion }}</li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>✅ No issues detected. System is healthy.</p>
+        {% endif %}
+    </div>
+
+</div>
+
+<footer>
+    Smart System Health Monitor • Alerts Page
+</footer>
+
+</body>
+</html>

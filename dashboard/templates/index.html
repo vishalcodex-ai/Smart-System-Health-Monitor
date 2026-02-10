@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Smart System Health Monitor</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- CHART.JS -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<link rel="stylesheet" href="/dashboard/static/css/style.css">
+<style>
+/* ================= GLOBAL ================= */
+body{
+    margin:0;
+    font-family: Inter, Arial, sans-serif;
+    background: linear-gradient(180deg,#0b1224,#020617);
+    color:#e5e7eb;
+}
+
+header{
+    background:#020617;
+    padding:18px 28px;
+    font-size:22px;
+    font-weight:600;
+    border-bottom:1px solid #1e293b;
+}
+
+.container{
+    max-width:1400px;
+    margin:auto;
+    padding:24px;
+}
+
+/* ================= CARD ================= */
+.card{
+    background: radial-gradient(circle at top,#020617,#020617dd);
+    border:1px solid #1e293b;
+    border-radius:16px;
+    padding:22px;
+}
+
+.card-title{
+    color:#38bdf8;
+    font-size:15px;
+    margin-bottom:10px;
+}
+
+/* ================= HEALTH SCORE ================= */
+.health-score{
+    font-size:68px;
+    font-weight:800;
+    text-align:center;
+}
+
+.good{color:#22c55e;}
+.warn{color:#facc15;}
+.bad{color:#ef4444;}
+
+.health-message{
+    text-align:center;
+    color:#94a3b8;
+    margin-top:6px;
+}
+
+/* ================= GRID ================= */
+.grid{
+    display:grid;
+    grid-template-columns: repeat(auto-fit,minmax(260px,1fr));
+    gap:20px;
+    margin-top:20px;
+}
+
+/* ================= METRIC ================= */
+.metric-value{
+    font-size:32px;
+    font-weight:700;
+}
+.metric-sub{
+    font-size:13px;
+    color:#94a3b8;
+}
+
+/* ================= LIST ================= */
+ul{
+    margin:0;
+    padding-left:18px;
+}
+li{
+    margin-bottom:6px;
+}
+
+/* ================= FOOTER ================= */
+footer{
+    text-align:center;
+    margin-top:30px;
+    padding:14px;
+    border-top:1px solid #1e293b;
+    font-size:14px;
+    color:#94a3b8;
+}
+</style>
+</head>
+
+<body>
+
+<header>📊 Smart System Health Monitor</header>
+
+<div class="container">
+
+<!-- ================= OVERALL HEALTH ================= -->
+<div class="card">
+    <div class="card-title">Overall Health Score</div>
+
+    {% if analysis.health.score >= 75 %}
+        <div class="health-score good">{{ analysis.health.score }}/100</div>
+    {% elif analysis.health.score >= 40 %}
+        <div class="health-score warn">{{ analysis.health.score }}/100</div>
+    {% else %}
+        <div class="health-score bad">{{ analysis.health.score }}/100</div>
+    {% endif %}
+
+    <div class="health-message">{{ analysis.health.message }}</div>
+
+    <div class="metric-sub">
+        Last update: {{ metrics.timestamp }}
+    </div>
+</div>
+
+<!-- ================= GRAPH ================= -->
+<div class="card">
+    <div class="card-title">📈 Health Score Movement</div>
+    <canvas id="healthChart" height="100"></canvas>
+</div>
+
+<!-- ================= SYSTEM METRICS ================= -->
+<div class="grid">
+
+    <div class="card">
+        <div class="card-title">CPU Load</div>
+        <div class="metric-value">{{ metrics.cpu }}%</div>
+        <div class="metric-sub">Processor usage</div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">RAM Load</div>
+        <div class="metric-value">{{ metrics.ram.percent }}%</div>
+        <div class="metric-sub">
+            {{ metrics.ram.used_gb }} GB / {{ metrics.ram.total_gb }} GB
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">Disk Load</div>
+        <div class="metric-value">{{ metrics.disk.percent }}%</div>
+        <div class="metric-sub">
+            {{ metrics.disk.used_gb }} GB / {{ metrics.disk.total_gb }} GB
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">Running Processes</div>
+        <div class="metric-value">{{ metrics.process_count }}</div>
+        <div class="metric-sub">Active processes</div>
+    </div>
+
+</div>
+
+<!-- ================= PROBLEMS & SUGGESTIONS ================= -->
+<div class="grid">
+
+    <div class="card">
+        <div class="card-title">❌ Detected Problems</div>
+        {% if analysis.health.problems %}
+            <ul>
+            {% for p in analysis.health.problems %}
+                <li>{{ p }}</li>
+            {% endfor %}
+            </ul>
+        {% else %}
+            <span class="good">No critical problem</span>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <div class="card-title">🛠️ Suggestions</div>
+        {% if analysis.health.suggestions %}
+            <ul>
+            {% for s in analysis.health.suggestions %}
+                <li>{{ s }}</li>
+            {% endfor %}
+            </ul>
+        {% else %}
+            <span class="good">System running smoothly</span>
+        {% endif %}
+    </div>
+
+</div>
+
+</div>
+
+<footer>© Smart System Health Monitor</footer>
+
+<!-- ================= GRAPH SCRIPT ================= -->
+<script>
+const score = JSON.parse('{{ analysis.health.score | tojson }}');
+const MAX = 45;
+
+let history = JSON.parse(localStorage.getItem("health_history")) || [];
+history.push(score);
+if(history.length > MAX) history.shift();
+localStorage.setItem("health_history", JSON.stringify(history));
+
+const ctx = document.getElementById("healthChart").getContext("2d");
+
+new Chart(ctx,{
+    type:"line",
+    data:{
+        labels: history.map((_,i)=>i+1),
+        datasets:[{
+            label:"Health Score",
+            data: history,
+            fill:true,
+            tension:0.35,
+            pointRadius:3,
+            segment:{
+                borderColor:c=>{
+                    const y=c.p1.parsed.y;
+                    if(y<=30) return "#ef4444";
+                    if(y<70) return "#facc15";
+                    return "#22c55e";
+                },
+                backgroundColor:c=>{
+                    const y=c.p1.parsed.y;
+                    if(y<=30) return "rgba(239,68,68,0.25)";
+                    if(y<70) return "rgba(250,204,21,0.25)";
+                    return "rgba(34,197,94,0.25)";
+                }
+            }
+        }]
+    },
+    options:{
+        animation:false,
+        scales:{
+            y:{min:0,max:100,ticks:{color:"#94a3b8"},grid:{color:"#1e293b"}},
+            x:{ticks:{color:"#94a3b8"},grid:{display:false}}
+        },
+        plugins:{
+            legend:{labels:{color:"#e5e7eb"}}
+        }
+    }
+});
+
+/* 🚨 CRITICAL ALERT */
+if ("{{ analysis.health.status }}" === "Critical") {
+    alert("🚨 SYSTEM ALERT 🚨\n\n{{ analysis.health.message }}");
+}
+
+setTimeout(() => {
+        location.reload();
+      }, 5000);
+</script>
+
+</body>
+</html>

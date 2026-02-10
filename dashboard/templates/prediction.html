@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Failure Prediction</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+    <style>
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            background: #0f172a;
+            color: #e5e7eb;
+            margin: 0;
+            padding: 0;
+        }
+
+        header {
+            background: #020617;
+            padding: 15px 25px;
+            font-size: 22px;
+            font-weight: bold;
+            border-bottom: 2px solid #1e293b;
+        }
+
+        .container {
+            padding: 20px;
+            max-width: 900px;
+            margin: auto;
+        }
+
+        .card {
+            background: #020617;
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid #1e293b;
+            margin-bottom: 20px;
+        }
+
+        h3 {
+            margin-top: 0;
+            color: #38bdf8;
+        }
+
+        .stat {
+            font-size: 20px;
+            margin: 10px 0;
+        }
+
+        .good {
+            color: #22c55e;
+            font-weight: bold;
+        }
+
+        .warn {
+            color: #facc15;
+            font-weight: bold;
+        }
+
+        .bad {
+            color: #ef4444;
+            font-weight: bold;
+        }
+
+        .risk-box {
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+
+        .risk-low {
+            background: rgba(34, 197, 94, 0.15);
+            border: 1px solid #22c55e;
+        }
+
+        .risk-medium {
+            background: rgba(250, 204, 21, 0.15);
+            border: 1px solid #facc15;
+        }
+
+        .risk-high {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid #ef4444;
+        }
+
+        .nav {
+            margin-bottom: 15px;
+        }
+
+        .nav a {
+            color: #38bdf8;
+            margin-right: 15px;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        .nav a:hover {
+            text-decoration: underline;
+        }
+
+        footer {
+            text-align: center;
+            padding: 10px;
+            background: #020617;
+            border-top: 1px solid #1e293b;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    🔮 Future System Failure Prediction
+</header>
+
+<div class="container">
+
+    <!-- Navigation -->
+    <div class="nav">
+        <a href="/">🏠 Dashboard</a>
+        <a href="/alerts">🚨 Alerts</a>
+    </div>
+
+    <div class="card">
+        <h3>Prediction Summary</h3>
+
+        {% if prediction.prediction_enabled %}
+
+            <div class="stat">
+                Failure Probability:
+                <strong>{{ prediction.failure_probability }}%</strong>
+            </div>
+
+            <div class="stat">
+                Prediction Confidence:
+                <strong>{{ prediction.confidence }}%</strong>
+            </div>
+
+            {% if prediction.failure_probability < 40 %}
+                <div class="risk-box risk-low">
+                    <p class="good">✅ Low Risk</p>
+                    <p>System is expected to remain stable in near future.</p>
+                </div>
+
+            {% elif prediction.failure_probability < 70 %}
+                <div class="risk-box risk-medium">
+                    <p class="warn">⚠️ Medium Risk</p>
+                    <p>Some system components may face issues if load continues.</p>
+                </div>
+
+            {% else %}
+                <div class="risk-box risk-high">
+                    <p class="bad">❌ High Risk</p>
+                    <p>
+                        High chance of system failure detected.
+                        Immediate optimization and monitoring recommended.
+                    </p>
+                </div>
+            {% endif %}
+
+        {% else %}
+            <p>❌ Prediction not available.</p>
+            <p>
+                Machine Learning model may not be trained or enabled.
+                Please check system configuration.
+            </p>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <h3>ℹ️ How Prediction Works</h3>
+        <ul>
+            <li>Uses historical system metrics</li>
+            <li>Analyzes CPU, RAM, Disk, Network & Temperature</li>
+            <li>Applies Machine Learning classification</li>
+            <li>Estimates probability of future failure</li>
+        </ul>
+    </div>
+
+</div>
+
+<footer>
+    Smart System Health Monitor • Prediction Module
+</footer>
+
+</body>
+</html>
